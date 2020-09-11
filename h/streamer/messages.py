@@ -151,17 +151,25 @@ def _generate_annotation_event(message, socket, annotation):
         links_service = request.find_service(name="links")
         resource = AnnotationContext(annotation, group_service, links_service)
 
-        # Check whether client is authorized to read this annotation.
-        read_principals = principals_allowed_by_permission(resource, "read")
-        if not set(read_principals).intersection(socket.effective_principals):
+        if action == "delete":
+            if not annotation.shared:
+                # Only the annotation's creator can see deletions of private annotations.
+                required_principals = [annotation.userid]
+            else:
+                # Allow anyone in the group to observe deletions of shared annotations.
+                required_principals = principals_allowed_by_permission(resource.group, "read")
+        else:
+            required_principals = principals_allowed_by_permission(resource, "read")
+        if not set(required_principals).intersection(socket.effective_principals):
             return None
 
-        presenter = request.find_service(name="annotation_json_presentation")
-        serialized = presenter.present(resource)
-
-        notification["payload"] = [serialized]
         if action == "delete":
             notification["payload"] = [{"id": annotation.id}]
+        else:
+            presenter = request.find_service(name="annotation_json_presentation")
+            serialized = presenter.present(resource)
+            notification["payload"] = [serialized]
+
         return notification
 
 
